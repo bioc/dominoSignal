@@ -83,7 +83,7 @@
 
 ### Plotting Functions
 
-- Added chord plot of ligand expression targetting a specified receptor, with chord widths proportional to ligand expression per cell cluster.
+- Added chord plot of ligand expression targeting a specified receptor, with chord widths proportional to ligand expression per cell cluster.
 - Added arguments to gene network plots to show communication between two clusters.
 - Added filtering to signaling network plots to show outgoing signaling from specified clusters.
 

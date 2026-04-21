@@ -118,7 +118,7 @@ feat_heatmap(dom, bool = TRUE, use_raster = FALSE)
 
 ```{r incoming}
 #| fig.alt: >
-#|  Heatmap of ligand expression by sending cluster targetting CD8 T cells.
+#|  Heatmap of ligand expression by sending cluster targeting CD8 T cells.
 incoming_signaling_heatmap(dom, "CD8_T_cell")
 ```
 
