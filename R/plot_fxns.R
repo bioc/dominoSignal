@@ -377,7 +377,7 @@ gene_network <- function(dom, clust, OutgoingSignalingClust = NULL,
       mat <- dom@cl_signaling_matrices[[cl]]
       if (dim(mat)[1] == 0) {
         message("No signaling found for ", cl, " under build parameters.")
-        (next)()
+        next
       }
       all_sums <- c(all_sums, rowSums(mat))
       tfs <- c(tfs, dom@linkages$clust_tf[[cl]])

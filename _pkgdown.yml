@@ -118,7 +118,7 @@ navbar:
     github:
       icon: fa-github
       href: https://github.com/FertigLab/dominoSignal
-      aria-label: "View Github repository"
+      aria-label: "View GitHub repository"
 
 home:
   title: Cell Communication from Single Cell RNA Sequencing Data
