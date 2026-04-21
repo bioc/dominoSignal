@@ -414,6 +414,7 @@ gene_network <- function(dom, clust, OutgoingSignalingClust = NULL,
     allowed_ligs <- c()
     if (!is.null(OutgoingSignalingClust)) {
         outgoing_cls <- paste0("L_", OutgoingSignalingClust)
+        all_sums <- c()
     } else {
         outgoing_cls <- NULL
     }
@@ -421,14 +422,19 @@ gene_network <- function(dom, clust, OutgoingSignalingClust = NULL,
       if (!is.null(outgoing_cls)) {
         mat <- dom@cl_signaling_matrices[[cl]][, outgoing_cls, drop = FALSE]
         if (is.null(dim(mat))) {
-          allowed_ligs <- names(mat[mat > 0])
-          all_sums <- mat[mat > 0]
+          new_ligs <- names(mat[mat > 0])
+          new_sums <- mat[mat > 0]
         } else {
-          allowed_ligs <- rownames(mat[rowSums(mat) > 0, , drop = FALSE]) # Remove ligands with 0s for all clusters
-          all_sums <- rowSums(mat[rowSums(mat) > 0, , drop = FALSE])
+          new_ligs <- rownames(mat[rowSums(mat) > 0, , drop = FALSE]) # Remove ligands with 0s for all clusters
+          new_sums <- rowSums(mat[rowSums(mat) > 0, , drop = FALSE])
         }
+        allowed_ligs <- union(allowed_ligs, new_ligs)
+        shared <- intersect(names(all_sums), names(new_sums))
+        all_sums[shared] <- all_sums[shared] + new_sums[shared]
+        new_only <- setdiff(names(new_sums), names(all_sums))
+        all_sums <- c(all_sums, new_sums[new_only])
       } else {
-        allowed_ligs <- rownames(dom@cl_signaling_matrices[[cl]])
+        allowed_ligs <- union(allowed_ligs, rownames(dom@cl_signaling_matrices[[cl]]))
       }
     }
   } else {
