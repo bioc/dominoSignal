@@ -22,13 +22,16 @@ if (!requireNamespace("BiocManager")) {
 BiocManager::install("dominoSignal")
 ```
 
-The development version is currently hosted on the [FertigLab GitHub](https://github.com/FertigLab) on the [dominoSignal GitHub repository](https://github.com/FertigLab/dominoSignal), and can be installed using the remotes package.
+The development version can be installed from the devel branch of Bioconductor.
+
 
 ``` r
-if (!require(remotes)) {
-    install.packages("remotes")
-}
-remotes::install_github("FertigLab/dominoSignal")
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+# The following initializes usage of Bioc devel
+BiocManager::install(version = "devel")
+BiocManager::install("dominoSignal")
 ```
 
 ## Usage Overview
