@@ -73,7 +73,7 @@ signaling_network(
 
 }
 \seealso{
-Other {networks}: 
+Network Plotting Functions:
 \code{\link{gene_network}()}
 }
-\concept{{networks}}
+\concept{networks}

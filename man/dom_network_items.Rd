@@ -29,7 +29,7 @@ all_tfs <- dom_network_items(pbmc_dom_built_tiny, return = "features")
 
 }
 \seealso{
-Other {access}: 
+Accessor Functions:
 \code{\link{dom_clusters}()},
 \code{\link{dom_correlations}()},
 \code{\link{dom_counts}()},
@@ -41,4 +41,4 @@ Other {access}:
 \code{\link{dom_tf_activation}()},
 \code{\link{dom_zscores}()}
 }
-\concept{{access}}
+\concept{access}

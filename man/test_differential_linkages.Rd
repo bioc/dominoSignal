@@ -55,9 +55,9 @@ tiny_differential_linkage_c1 <- test_differential_linkages(
 
 }
 \seealso{
-Other {differentials}: 
+Differential Signaling Workflow:
 \code{\link{count_linkage}()},
 \code{\link{plot_differential_linkages}()},
 \code{\link{summarize_linkages}()}
 }
-\concept{{differentials}}
+\concept{differentials}

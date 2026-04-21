@@ -24,7 +24,7 @@ cell_cluster_label <- dom_clusters(pbmc_dom_built_tiny, labels = TRUE)
 
 }
 \seealso{
-Other {access}: 
+Accessor Functions:
 \code{\link{dom_correlations}()},
 \code{\link{dom_counts}()},
 \code{\link{dom_database}()},
@@ -36,4 +36,4 @@ Other {access}:
 \code{\link{dom_tf_activation}()},
 \code{\link{dom_zscores}()}
 }
-\concept{{access}}
+\concept{access}

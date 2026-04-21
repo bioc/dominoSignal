@@ -29,8 +29,8 @@ cor_scatter(pbmc_dom_built_tiny, "FLI1","CXCR3")
 
 }
 \seealso{
-Other {misc_plotting}: 
+Assorted Plotting Functions:
 \code{\link{circos_ligand_receptor}()},
 \code{\link{plot_differential_linkages}()}
 }
-\concept{{misc_plotting}}
+\concept{misc_plotting}

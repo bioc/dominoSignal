@@ -23,7 +23,7 @@ cor_matrix <- dom_correlations(pbmc_dom_built_tiny, "rl")
 
 }
 \seealso{
-Other {access}: 
+Accessor Functions:
 \code{\link{dom_clusters}()},
 \code{\link{dom_counts}()},
 \code{\link{dom_database}()},
@@ -35,4 +35,4 @@ Other {access}:
 \code{\link{dom_tf_activation}()},
 \code{\link{dom_zscores}()}
 }
-\concept{{access}}
+\concept{access}

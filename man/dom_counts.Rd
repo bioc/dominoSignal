@@ -21,7 +21,7 @@ counts <- dom_counts(pbmc_dom_built_tiny)
 
 }
 \seealso{
-Other {access}: 
+Accessor Functions:
 \code{\link{dom_clusters}()},
 \code{\link{dom_correlations}()},
 \code{\link{dom_database}()},
@@ -33,4 +33,4 @@ Other {access}:
 \code{\link{dom_tf_activation}()},
 \code{\link{dom_zscores}()}
 }
-\concept{{access}}
+\concept{access}

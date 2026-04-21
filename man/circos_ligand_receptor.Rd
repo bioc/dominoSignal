@@ -41,8 +41,8 @@ circos_ligand_receptor(pbmc_dom_built_tiny, receptor = "CXCR3", cell_colors = co
 
 }
 \seealso{
-Other {misc_plotting}: 
+Assorted Plotting Functions:
 \code{\link{cor_scatter}()},
 \code{\link{plot_differential_linkages}()}
 }
-\concept{{misc_plotting}}
+\concept{misc_plotting}

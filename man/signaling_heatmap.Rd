@@ -48,9 +48,9 @@ signaling_heatmap(pbmc_dom_built_tiny, normalize = "rec_norm")
 
 }
 \seealso{
-Other {heatmaps}: 
+Heatmap Plotting Functions:
 \code{\link{cor_heatmap}()},
 \code{\link{feat_heatmap}()},
 \code{\link{incoming_signaling_heatmap}()}
 }
-\concept{{heatmaps}}
+\concept{heatmaps}

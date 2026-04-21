@@ -53,9 +53,9 @@ incoming_signaling_heatmap(pbmc_dom_built_tiny, "CD8_T_cell")
 
 }
 \seealso{
-Other {heatmaps}: 
+Heatmap Plotting Functions:
 \code{\link{cor_heatmap}()},
 \code{\link{feat_heatmap}()},
 \code{\link{signaling_heatmap}()}
 }
-\concept{{heatmaps}}
+\concept{heatmaps}

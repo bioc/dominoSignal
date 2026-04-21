@@ -36,9 +36,9 @@ count_linkage(
 
 }
 \seealso{
-Other {differentials}: 
+Differential Signaling Workflow:
 \code{\link{plot_differential_linkages}()},
 \code{\link{summarize_linkages}()},
 \code{\link{test_differential_linkages}()}
 }
-\concept{{differentials}}
+\concept{differentials}

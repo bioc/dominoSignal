@@ -50,9 +50,9 @@ cor_heatmap(pbmc_dom_built_tiny, bool = FALSE, mark_connections = TRUE)
  
 }
 \seealso{
-Other {heatmaps}: 
+Heatmap Plotting Functions:
 \code{\link{feat_heatmap}()},
 \code{\link{incoming_signaling_heatmap}()},
 \code{\link{signaling_heatmap}()}
 }
-\concept{{heatmaps}}
+\concept{heatmaps}

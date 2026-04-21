@@ -26,7 +26,7 @@ full_database <- dom_database(pbmc_dom_built_tiny, name_only = FALSE)
 
 }
 \seealso{
-Other {access}: 
+Accessor Functions:
 \code{\link{dom_clusters}()},
 \code{\link{dom_correlations}()},
 \code{\link{dom_counts}()},
@@ -38,4 +38,4 @@ Other {access}:
 \code{\link{dom_tf_activation}()},
 \code{\link{dom_zscores}()}
 }
-\concept{{access}}
+\concept{access}
