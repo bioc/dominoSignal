@@ -393,6 +393,7 @@ gene_network <- function(dom, clust, OutgoingSignalingClust = NULL,
     tfs <- dom@linkages$clust_tf[["clust"]]
   }
   links <- c()
+  rec_tf_links <- c()
   all_recs <- c()
   all_tfs <- c()
   for (cl in as.character(clust)) {
@@ -403,7 +404,7 @@ gene_network <- function(dom, clust, OutgoingSignalingClust = NULL,
         all_tfs <- c(all_tfs, tf)
       }
       for (rec in recs) {
-        links <- c(links, rec, tf)
+        rec_tf_links <- c(rec_tf_links, rec, tf)
       }
     }
   }
@@ -421,13 +422,8 @@ gene_network <- function(dom, clust, OutgoingSignalingClust = NULL,
     for (cl in cl_with_signaling) {
       if (!is.null(outgoing_cls)) {
         mat <- dom@cl_signaling_matrices[[cl]][, outgoing_cls, drop = FALSE]
-        if (is.null(dim(mat))) {
-          new_ligs <- names(mat[mat > 0])
-          new_sums <- mat[mat > 0]
-        } else {
-          new_ligs <- rownames(mat[rowSums(mat) > 0, , drop = FALSE]) # Remove ligands with 0s for all clusters
-          new_sums <- rowSums(mat[rowSums(mat) > 0, , drop = FALSE])
-        }
+        new_ligs <- rownames(mat[rowSums(mat) > 0, , drop = FALSE]) # Remove ligands with 0s for all clusters
+        new_sums <- rowSums(mat[rowSums(mat) > 0, , drop = FALSE])
         allowed_ligs <- union(allowed_ligs, new_ligs)
         shared <- intersect(names(all_sums), names(new_sums))
         all_sums[shared] <- all_sums[shared] + new_sums[shared]
@@ -451,6 +447,14 @@ gene_network <- function(dom, clust, OutgoingSignalingClust = NULL,
       }
     }
   }
+  keep_recs <- unique(links[seq(2, length(links), by = 2)])
+  for (i in seq(1, length(rec_tf_links), by = 2)) {
+    if (rec_tf_links[i] %in% keep_recs) {
+      links <- c(links, rec_tf_links[i], rec_tf_links[i + 1])
+    }
+  }
+  all_recs <- unique(all_recs[all_recs %in% links])
+  all_tfs <- unique(all_tfs[all_tfs %in% links])
   all_ligs <- unique(all_ligs)
   # Make the graph
   graph <- igraph::graph(links)
