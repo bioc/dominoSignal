@@ -8,6 +8,8 @@
 
 - Fixed `create_rl_map_cellphonedb()` handling of partner B complex mappings and gene assignment.
 - Fixed `gene_network()` to avoid repeated prefixing of outgoing cluster names and to correctly subset outgoing signaling matrices.
+- Fixed `gene_network()` to only include receptor and TF nodes that are associated with a ligand if `OutgoingSignalingClust` is used.
+- Fixed `gene_network()` to accumulate ligand expression across clusters for ligand node scaling.
 - Fixed `signaling_network()` to assign undefined (`NA`) vertex sizes to 0 when scaling by signaling.
 - Fixed `dom_linkages()` with `by_cluster = TRUE` and `link_type = "tf-receptor"` to return `clust_tf_rec`.
 - Fixed `dom_signaling(cluster = ...)` to return the selected cluster matrix via list indexing.
