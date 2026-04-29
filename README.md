@@ -4,13 +4,24 @@ dominoSignal is an updated version of the original [domino](https://github.com/E
 
 ### Installation
 
-dominoSignal is the continuation of Domino software hosted on the [Elisseeff-Lab GitHub](https://github.com/Elisseeff-Lab/domino). dominoSignal is undergoing active development where aspects of how data is used, analyzed, and interpreted is subject to change as new features and fixes are implemented. The most up to date stable version is on the [FertigLab GitHub](https://github.com/FertigLab). This version of dominoSignal can be installed using the remotes package.
+dominoSignal is the continuation of Domino software hosted on the [Elisseeff-Lab GitHub](https://github.com/Elisseeff-Lab/domino). dominoSignal is undergoing active development where aspects of how data is used, analyzed, and interpreted is subject to change as new features and fixes are implemented. The most up to date stable version is available from [Bioconductor](https://bioconductor.org/packages/release/bioc/html/dominoSignal.html). This version of dominoSignal can be installed using BiocManager.
 
 ```r
-if(!require(remotes)){
-    install.packages('remotes')
+if (!requireNamespace("BiocManager")) {
+    install.packages("BiocManager")
 }
-remotes::install_github('FertigLab/dominoSignal')
+BiocManager::install("dominoSignal")
+```
+
+The development version can be installed from the devel branch of Bioconductor.
+
+```r
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+# The following initializes usage of Bioc devel
+BiocManager::install(version = "devel")
+BiocManager::install("dominoSignal")
 ```
 
 ### Usage Overview
