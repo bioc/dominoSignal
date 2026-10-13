@@ -98,3 +98,21 @@ test_that("test_differential_linkages errors on subject_names not present in lin
         "bogus"
     )
 })
+
+test_that("test_differential_linkages returns expected results when no features exist for linkage", {
+    missing_links <- tiny_linkage_summary
+    missing_links@subject_linkages <- lapply(missing_links@subject_linkages, FUN = function(x) {
+        x[[1]][["rec"]] <- character(0)
+        return(x)
+    })
+
+    expect_no_error(missing_diff <- test_differential_linkages(
+        link_summary = missing_links,
+        cluster = names(tiny_linkage_summary@subject_linkages[[1]])[1],
+        group.by = "group",
+        linkage = "rec"
+    ))
+
+    expect_shape(missing_diff, dim = c(0, 8))
+    expect_true(all(is.na(missing_diff[1 , ])))
+    })

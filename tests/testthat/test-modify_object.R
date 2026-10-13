@@ -38,3 +38,12 @@ test_that("rename_clusters function works correctly", {
         paste0("L_", c("W", "X", "Y"))
     )
 })
+
+test_that("non-character column can be added to rl_map", {
+    lr_name <- data.frame("abbrev" = c("L", "R"), "binary" = c(1, 0))
+    rl_expanded <- add_rl_column(map = rl_map_tiny, map_ref = "type_A",
+        conv = lr_name, new_name = "type_A_binary")
+    expect_shape(rl_expanded, dim = c(nrow(rl_map_tiny), ncol(rl_map_tiny) + 1))
+    expect_type(rl_expanded$type_A_binary, "double")
+    expect_identical(rl_map_tiny, rl_expanded[, colnames(rl_map_tiny)])
+})

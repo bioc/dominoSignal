@@ -18,3 +18,16 @@ test_that("expression functions run", {
     ))
     expect_no_error(do_norm(matrix(c(1, 2, 3, 4), nrow = 2), "row"))
 })
+
+test_that("mean_ligand_expression handles absent ligands", {
+    warn_msg <- capture_warnings(mean_exp <- mean_ligand_expression(
+        x = as.matrix(tiny_counts1),
+        ligands = c("GENE1", "GENE2"),
+        cell_ident = as.character(tiny_clusters1[1]),
+        cell_barcodes = colnames(tiny_counts1),
+        destination = "R_TEST"
+    ))
+    exp_msg <- c("Ligand GENE1 not found in expression matrix; skipping", "Ligand GENE2 not found in expression matrix; skipping")
+    expect_equal(warn_msg, exp_msg)
+    expect_null(mean_exp)
+})

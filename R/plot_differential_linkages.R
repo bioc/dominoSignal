@@ -63,7 +63,7 @@ plot_differential_linkages <- function(
     # values from test result for plotting
     cluster <- unique(dframe[["cluster"]])
     g_names_full <- colnames(dframe)[grepl("_n$", colnames(dframe)) & !grepl("^total_", colnames(dframe))]
-    g_names <- gsub("_n", "", g_names_full, fixed = TRUE)
+    g_names <- gsub("_n$", "", g_names_full)
     # proportion bar for linkage feature in all subjects
     ha_subject <- ComplexHeatmap::HeatmapAnnotation(
         subjects = ComplexHeatmap::anno_barplot(matrix(ncol = 2, c(

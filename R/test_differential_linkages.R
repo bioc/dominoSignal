@@ -78,7 +78,7 @@ test_differential_linkages <- function(
     
     test_result <- as.data.frame(t(vapply(
         result_df[["feature"]],
-        FUN.VALUE = numeric(2), FUN = function(x) {
+        FUN.VALUE = c("odds.ratio" = numeric(1), "p.value" = numeric(1)), FUN = function(x) {
             feat_count <- count_link[count_link[["feature"]] == x, !colnames(count_link) %in% c(
                 "feature",
                 "total_count"
@@ -105,7 +105,7 @@ test_differential_linkages <- function(
     # append test result columns to result
     result_df <- cbind(result_df, test_result)
     # append counts of active linkages for each group
-    count_append <- count_link[, colnames(count_link) != "feature"]
+    count_append <- count_link[, colnames(count_link) != "feature", drop = FALSE]
     colnames(count_append) <- vapply(
         colnames(count_append),
         FUN.VALUE = character(1), FUN = function(x) {
@@ -119,10 +119,12 @@ test_differential_linkages <- function(
     result_df <- cbind(result_df, count_append)
     # append total counts of subjects in each group and the total number of subjects
     total_n <- sum(subject_count[["total"]])
-    result_df[["total_n"]] <- total_n
-    for (g in group_levels) {
-        g_n <- as.numeric(subject_count[subject_count[[group.by]] == g, "total"])
-        result_df[[paste0(g, "_n")]] <- g_n
+    if (nrow(result_df) > 0) {
+        result_df[["total_n"]] <- total_n
+        for (g in group_levels) {
+            g_n <- as.numeric(subject_count[subject_count[[group.by]] == g, "total"])
+            result_df[[paste0(g, "_n")]] <- g_n
+        }
     }
     return(result_df)
 }

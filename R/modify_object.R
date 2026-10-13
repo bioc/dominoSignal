@@ -115,7 +115,8 @@ add_rl_column <- function(map, map_ref, conv, new_name) {
         get_row <- map[r_id, ]
         conv_ids <- which(conv[, 1] == get_row[[map_ref]])
         for (id in conv_ids) {
-            new_row <- c(as.matrix(get_row), conv[id, 2])
+            new_row <- get_row
+            new_row[[new_name]] <- conv[id, 2]
             new_map <- rbind(new_map, new_row)
         }
     }

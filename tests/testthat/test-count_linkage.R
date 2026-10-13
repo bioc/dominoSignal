@@ -150,3 +150,18 @@ test_that("count_linkage errors when group.by is not a subject_meta column", {
         "group.by variable not present in subject_meta"
     )
 })
+
+test_that("count_linkage total_count is always equal to the sum of the group counts", {
+    dup_linksum <- tiny_linkage_summary
+    dup_linksum@subject_linkages$dom1[[1]]$rec <- rep(dup_linksum@subject_linkages$dom1[[1]]$rec, 2)
+    expect_length(dup_linksum@subject_linkages$dom1[[1]]$rec, 4)
+
+    expect_no_error(count_dup <- count_linkage(link_summary = dup_linksum, cluster = names(dup_linksum@subject_linkages[[1]])[1], linkage = "rec"))
+    expect_true(all(count_dup$total_count == length(dup_linksum@subject_linkages)))
+
+    dup_linksum@subject_linkages$dom1[[2]]$rec <- rep(dup_linksum@subject_linkages$dom1[[2]]$rec, 5)
+
+    expect_length(dup_linksum@subject_linkages$dom1[[2]]$rec, 5)
+    expect_no_error(count_dup <- count_linkage(link_summary = dup_linksum, cluster = names(dup_linksum@subject_linkages[[1]])[2], linkage = "rec"))
+    expect_true(all(count_dup$total_count == length(dup_linksum@subject_linkages)))
+})

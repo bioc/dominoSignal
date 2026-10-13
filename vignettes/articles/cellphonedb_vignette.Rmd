@@ -27,7 +27,7 @@ temp_dir <- tempdir()
 cellphone_dir <- file.path(temp_dir, "cellphone")
 
 # URL for desired version of CellPhoneDB
-cellphone_url <- "https://github.com/ventolab/cellphonedb-data/archive/refs/tags/v4.0.0.tar.gz"`
+cellphone_url <- "https://github.com/ventolab/cellphonedb-data/archive/refs/tags/v4.0.0.tar.gz"
 
 # download compressed database
 cellphone_tar <- paste0(temp_dir, "/cellphoneDB_v4.tar.gz")

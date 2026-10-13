@@ -35,10 +35,9 @@ count_linkage <- function(link_summary, cluster, group.by = NULL, linkage = "rec
 
     link_summary <- filter_by_subject_names(link_summary, subject_names)
     all_int_ls <- lapply(link_summary@subject_linkages, FUN = function(x) {
-        return(x[[cluster]][[linkage]])
+        return(unique(x[[cluster]][[linkage]]))
     })
-    all_int <- unlist(all_int_ls)
-    feature <- table(unlist(all_int))
+    feature <- table(unlist(all_int_ls))
     dframe <- data.frame(feature = names(feature), total_count = as.numeric(feature))
     if (!is.null(group.by)) {
         if (!group.by %in% colnames(link_summary@subject_meta)) {

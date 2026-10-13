@@ -44,11 +44,9 @@ mean_exp_by_cluster <- function(dom, clusts, genes) {
 
     gene_exp_list <- purrr::map(seq_along(clusts), function(x) {
         cl <- clusts[x]
-        n_cell <- length(which(dom@clusters == cl))
-        if (n_cell > 1) {
-            sig <- rowMeans(dom@z_scores[genes, which(dom@clusters == cl)])
-        } else if (n_cell == 1) {
-            sig <- dom@z_scores[genes, which(dom@clusters == cl)]
+        cell_idx <- which(dom@clusters == cl)
+        if (length(cell_idx) > 0) {
+            sig <- rowMeans(dom@z_scores[genes, cell_idx, drop = FALSE])
         } else {
             sig <- rep(0, length(genes))
             names(sig) <- genes
@@ -94,7 +92,11 @@ mean_ligand_expression <- function(x, ligands, cell_ident, cell_barcodes, destin
     dframe <- NULL
     for (feat in ligands) {
         # index of ligand row
-        lig_index <- grep(paste0("^", feat, "$"), rownames(x))
+        lig_index <- match(feat, rownames(x))
+        if (is.na(lig_index)) {
+            warning("Ligand ", feat, " not found in expression matrix; skipping")
+            next
+        }
         # column indices of cells belonging to cell_ident
         cell_index <- colnames(x) %in% cell_barcodes
         cell_df <- data.frame(
