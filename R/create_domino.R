@@ -1,0 +1,373 @@
+#' Create a [domino()] object and prepare it for network construction
+#'
+#' This function reads in a receptor ligand signaling database, cell level
+#' features of some kind (ie. output from pySCENIC), z-scored single cell data,
+#' and cluster id for single cell data, calculates a correlation matrix between
+#' receptors and other features (this is transcription factor module scores if
+#' using pySCENIC), and finds features enriched by cluster. It will return a
+#' [domino()] object prepared for [build_domino()], which will calculate a signaling
+#' network.
+#'
+#' @param rl_map Data frame where each row describes a receptor-ligand interaction with required columns
+#'   gene_A & gene_B including the gene names for the receptor and ligand and type_A & type_B annotating
+#'   if genes A and B are a ligand (L) or receptor (R). Each interaction must pair one receptor with one ligand (rows that do not, such as ligand-ligand or missing types) are excluded with a warning.
+#' @param features Either a path to a csv containing cell level features of interest (ie. the auc matrix from pySCENIC)
+#'   or named matrix with cells as columns and features as rows.
+#' @param counts Counts matrix for the data. Used to threshold receptors based on expression (`rec_min_thresh`), to calculate percentage of clusters with receptor expression, and to remove cells with zero receptor counts if `remove_rec_dropout` is TRUE. Dense matrices are converted to sparse `dgCMatrix` for storage.
+#' @param z_scores Matrix containing z-scored expression data for all cells with cells as columns and features as rows. Receptor genes that pass `rec_min_thresh` but are not present in the z_scores matrix are excluded from correlation calculations with a warning.
+#' @param clusters Named factor containing cell cluster with names as cells.
+#' @param tf_targets Optional. A list where names are transcription factors and the stored values are character vectors
+#'   of genes in the transcription factor's regulon.
+#' @param verbose Boolean indicating whether or not to print progress during computation.
+#' @param use_complexes Boolean indicating whether you wish to use receptor/ligand complexes in the receptor ligand
+#'   signaling database. If FALSE, receptor/ligand pairs where either functions as a protein complex will not be
+#'   considered when constructing the signaling network.
+#' @param rec_min_thresh Minimum expression level of receptors by cell. Default is 0.025 or 2.5 percent of all cells
+#'   in the data set. This is important when calculating correlation to connect receptors to transcription activity.
+#'   If this threshold is too low then correlation calculations will proceed with very few cells with non-zero
+#'   expression.
+#' @param remove_rec_dropout Whether to remove receptors with 0 expression counts when calculating correlations.
+#'   This can reduce false positive correlation calculations when receptors have high dropout rates.
+#' @param tf_selection_method Selection of which method to target transcription factors. Options: 
+#' \itemize{
+#' \item{"clusters"}: TFs are selected based on differential activity by cluster using Wilcoxon rank-sum test.
+#' \item{"variable"}: TFs are selected based on coefficient of variation (also known as relative standard deviation or normalized root-mean-square) across all cells in dataset.
+#' \item{"all"}: All TFs provided in the `features` matrix are included in downstream analysis.
+#' }
+#' @param tf_variance_quantile Quantile of coefficient of variation used to threshold features to take if `tf_selection_method` is `variable`. Features with coefficient of variation ranked above quantile are kept (default of 0.5 keeps the most variable half of features and higher numbers keep fewer features). Ignored if tf_selection_method is not 'variable'.
+#' @return A [domino()] object
+#' @export create_domino
+#' @seealso [create_rl_map_cellphonedb()] for creating receptor-ligand maps, 
+#'   [create_regulon_list_scenic()] for creating regulon lists from pySCENIC output,
+#'   and [build_domino()] for building signaling networks from [domino()] objects created by this function.
+#' @examples
+#' 
+#' data(CellPhoneDB)
+#' data(SCENIC)
+#' data(PBMC)
+#'
+#' pbmc_dom_tiny <- create_domino(
+#'  rl_map = CellPhoneDB$rl_map_tiny, features = SCENIC$auc_tiny,
+#'  counts = PBMC$count_tiny, z_scores = PBMC$zscore_tiny,
+#'  clusters = PBMC$clusters_tiny, tf_targets = SCENIC$regulon_list_tiny,
+#'  use_complexes = TRUE, remove_rec_dropout = FALSE,
+#'  verbose = FALSE
+#'  )
+#'
+
+create_domino <- function(
+    rl_map, features, counts, z_scores,
+    clusters, tf_targets = NULL, verbose = TRUE,
+    use_complexes = TRUE, rec_min_thresh = 0.025, remove_rec_dropout = FALSE,
+    tf_selection_method = "clusters", tf_variance_quantile = 0.5
+) {
+    # Check inputs:
+    check_arg(rl_map,
+        allow_class = "data.frame",
+        need_vars = c("gene_A", "gene_B", "type_A", "type_B")
+    )
+
+    check_arg(features, allow_class = c("data.frame", "character", "matrix"))
+    if (is.data.frame(features) || is.matrix(features)) {
+        check_arg(features, need_rownames = TRUE, need_colnames = TRUE)
+    }
+
+
+    check_arg(counts,
+        allow_class = c("matrix", "data.frame", "Matrix", "dgCMatrix"),
+        need_rownames = TRUE, need_colnames = TRUE
+    )
+    check_arg(z_scores,
+        allow_class = "matrix", need_rownames = TRUE,
+        need_colnames = TRUE
+    )
+    check_arg(clusters, allow_class = "factor", need_names = TRUE)
+
+
+    check_arg(rec_min_thresh, allow_class = "numeric", allow_range = c(0, 1))
+
+    check_arg(tf_selection_method,
+        allow_values = c("clusters", "variable", "all")
+    )
+
+    check_arg(tf_variance_quantile, allow_class = "numeric",
+        allow_len = 1, allow_range = c(0, 1))
+
+    # Convert dense matrix inputs to sparse
+    if (!is(counts, "dgCMatrix")) counts <- as.matrix(counts)
+    counts <- as(as(as(counts, "dMatrix"), "generalMatrix"), "CsparseMatrix")
+
+    # Create object
+    dom <- domino()
+    dom@misc[["create"]] <- TRUE
+    dom@misc[["create_version"]] <- as.character(utils::packageVersion("dominoSignal"))
+    dom@misc[["build"]] <- FALSE
+    dom@misc[["build_vars"]] <- NULL
+    dom@misc[["create_vars"]] <- list(
+        tf_selection_method = tf_selection_method, tf_variance_quantile = tf_variance_quantile,
+        use_complexes = use_complexes, rec_min_thresh = rec_min_thresh, remove_rec_dropout = remove_rec_dropout
+    )
+
+    # Read in lr db info
+    if (verbose) {
+        message("Reading in and processing signaling database")
+    }
+    if ("database_name" %in% colnames(rl_map)) {
+        dom@db_info <- rl_map
+        if (verbose) {
+            message("Database provided from source: ", unique(rl_map[["database_name"]]))
+        }
+    } else {
+        dom@db_info <- rl_map
+    }
+    # Make sure interactions have one receptor with one ligand
+    rl_pair <- paste(rl_map[["type_A"]], rl_map[["type_B"]])
+    not_rl <- !rl_pair %in% c("R L", "L R")
+    if (any(not_rl)) {
+        warning("Excluding ", sum(not_rl), " interactions that do not pair one receptor (R) with one ligand (L): ",
+        toString(unique(rl_pair[not_rl])))
+    }
+    rl_map <- rl_map[!not_rl, , drop = FALSE]
+    if (nrow(rl_map) == 0) {
+        stop("No rl_map rows pair a receptor (R) with a ligand (L). Please check your input.")
+    }
+    # check for receptors that match receptor complex syntax of comma separated genes
+    non_complex_index <- which(!grepl(",", rl_map[["gene_A"]], fixed = TRUE) &
+            !grepl(",", rl_map[["gene_B"]], fixed = TRUE))
+    # discard interactions including complexes if requested
+    if (!use_complexes) {
+        rl_map <- rl_map[non_complex_index, ]
+    }
+    # Get genes for receptors
+    rl_reading <- NULL
+    for (i in seq_len(nrow(rl_map))) {
+        rl <- list()
+        inter <- rl_map[i, ]
+        ps <- ifelse(inter[["type_A"]] == "R", "A", "B")
+        qs <- ifelse(ps == "A", "B", "A")
+        R.gene <- inter[[paste0("gene_", ps)]]
+        L.gene <- inter[[paste0("gene_", qs)]]
+        rl[["R.gene"]] <- R.gene
+        rl[["L.gene"]] <- L.gene
+        if (paste0("uniprot_", ps) %in% names(inter)) {
+            rl[["R.uniprot"]] <- inter[[paste0("uniprot_", ps)]]
+        }
+        if (paste0("uniprot_", qs) %in% names(inter)) {
+            rl[["L.uniprot"]] <- inter[[paste0("uniprot_", qs)]]
+        }
+        if (paste0("name_", ps) %in% names(inter)) {
+            rl[["R.name"]] <- inter[[paste0("name_", ps)]]
+        } else {
+            rl[["R.name"]] <- inter[[paste0("gene_", ps)]]
+        }
+        if (paste0("name_", qs) %in% names(inter)) {
+            rl[["L.name"]] <- inter[[paste0("name_", qs)]]
+        } else {
+            rl[["L.name"]] <- inter[[paste0("gene_", qs)]]
+        }
+        rl <- as.data.frame(rl)
+        rl_reading <- rbind(rl_reading, rl)
+    }
+    if (nrow(rl_reading) == 0) stop("No genes annotated as receptors included in rl_map")
+    # save a list of complexes and their components
+    dom@linkages$complexes <- NULL
+    if (use_complexes) {
+        complex_list <- list()
+        for (i in seq_len(nrow(rl_reading))) {
+            inter <- rl_reading[i, ]
+            if (grepl(",", inter[["L.gene"]], fixed = TRUE)) {
+                complex_list[[inter[["L.name"]]]] <- unlist(strsplit(inter[["L.gene"]], split = ",", fixed = TRUE))
+            }
+            if (grepl(",", inter[["R.gene"]], fixed = TRUE)) {
+                complex_list[[inter[["R.name"]]]] <- unlist(strsplit(inter[["R.gene"]], split = ",", fixed = TRUE))
+            }
+        }
+        dom@linkages$complexes <- complex_list
+    }
+    rec_genes <- unique(unlist(strsplit(rl_reading[["R.gene"]], split = ",", fixed = TRUE)))
+    rec_names <- rl_reading[["R.name"]]
+    # building RL linkages
+    rec_lig_linkage <- list()
+    for (rec in rec_names) {
+        inter <- rl_reading[rl_reading[["R.name"]] == rec, ]
+        ligs <- inter[["L.name"]]
+        rec_lig_linkage[[rec]] <- ligs
+    }
+    dom@linkages[["rec_lig"]] <- rec_lig_linkage
+    dom@misc[["rl_map"]] <- rl_reading
+    # Get z-score and cluster info
+    if (verbose) {
+        message("Getting z_scores, clusters, and counts")
+    }
+    if (is(features, "character")) {
+        features <- read.csv(features, row.names = 1, check.names = FALSE)
+    }
+    # Align cells by name to the order of z_scores; downstream calculations index cells by position
+    cells <- Reduce(intersect, list(colnames(z_scores), colnames(counts), colnames(features), names(clusters)))
+    if (length(cells) == 0) {
+        stop("No cells are shared between z_scores, counts, features, and clusters.")
+    }
+    n_dropped <- c(
+        z_scores = ncol(z_scores), counts = ncol(counts), features = ncol(features), clusters = length(clusters)
+    ) - length(cells)
+    if (any(n_dropped > 0)) {
+        warning(
+            "Using the ", length(cells), " cells shared between z_scores, counts, features, and clusters. ",
+            "Cells dropped: ", toString(paste(names(n_dropped), n_dropped, sep = " = "))
+        )
+    }
+    z_scores <- z_scores[, cells, drop = FALSE]
+    counts <- counts[, cells, drop = FALSE]
+    features <- features[, cells, drop = FALSE]
+    clusters <- droplevels(clusters[cells])
+    dom@z_scores <- z_scores
+    if (!is.null(clusters)) {
+        dom@clusters <- clusters
+    }
+    # Calculate differential expression of features by cluster.
+    dom@features <- as.matrix(features)
+    if (tf_selection_method == "clusters") {
+        p_vals <- matrix(1, nrow = nrow(features), ncol = nlevels(dom@clusters))
+        rownames(p_vals) <- rownames(features)
+        colnames(p_vals) <- levels(dom@clusters)
+        if (verbose) {
+            message("Calculating feature enrichment by cluster")
+            clust_n <- nlevels(dom@clusters)
+        }
+        for (clust in levels(dom@clusters)) {
+            if (verbose) {
+                cur <- which(levels(dom@clusters) == clust)
+                message(cur, " of ", clust_n)
+            }
+            cells <- which(dom@clusters == clust)
+            for (feat in rownames(dom@features)) {
+                p_vals[feat, clust] <- stats::wilcox.test(
+                    dom@features[feat, cells], dom@features[feat, -cells],
+                    alternative = "g"
+                )$p.value
+            }
+        }
+        dom@clust_de <- p_vals
+    }
+    if (tf_selection_method == "variable") {
+        variances <- apply(dom@features, 1, function(x) {
+            sd(x) / mean(x)
+        })
+        keep_n <- length(variances) * tf_variance_quantile
+        keep_id <- which(rank(variances) > keep_n)
+        dom@features <- dom@features[names(keep_id), , drop = FALSE]
+    }
+    # store tf_targets in linkages if they are provided as a list
+    if (is(tf_targets, "list")) {
+        dom@linkages[["tf_targets"]] <- tf_targets
+    } else {
+        dom@linkages[["tf_targets"]] <- NULL
+        message("tf_targets is not a list. No regulons stored")
+    }
+    # Calculate correlation matrix between features and receptors.
+    dom@counts <- counts
+    zero_sum <- rowSums(counts == 0)
+    keeps <- which(zero_sum < (1 - rec_min_thresh) * ncol(counts))
+    ser_receptors <- intersect(names(keeps), rec_genes)
+    # Receptors missing from z_scores cannot be assessed
+    missing_z <- setdiff(ser_receptors, rownames(dom@z_scores))
+    if (length(missing_z) > 0) {
+        warning("Receptor genes not found in z_scores are excluded from correlation calculations: ", toString(missing_z))
+        ser_receptors <- setdiff(ser_receptors, missing_z)
+        if (length(ser_receptors) == 0) {
+            stop("No receptor genes are present in z_scores. Cannot calculate correlations.")
+        }
+    }
+    rho <- matrix(0, nrow = length(ser_receptors), ncol = nrow(dom@features))
+    rownames(rho) <- ser_receptors
+    colnames(rho) <- rownames(dom@features)
+    if (verbose) {
+        message("Calculating correlations")
+        n_tf <- nrow(dom@features)
+    }
+    for (module in rownames(dom@features)) {
+        # If df is provided then check if receptors are targets of TF. If they are then set
+        # correlation equal to NA.
+        if (verbose) {
+            cur <- which(rownames(dom@features) == module)
+            message(cur, " of ", n_tf)
+        }
+        if (!is.null(dom@linkages$tf_targets)) {
+            tf <- gsub(pattern = "...", replacement = "", module, fixed = TRUE)
+            # correction for AUC values from pySCENIC that append an ellipses to TF names due to (+) characters
+            # in the original python output
+            module_targets <- tf_targets[[tf]]
+            module_rec_targets <- intersect(module_targets, ser_receptors)
+        } else {
+            module_rec_targets <- NULL
+        }
+        scores <- dom@features[module, ]
+        rhorow <- rep(0, length(ser_receptors))
+        names(rhorow) <- ser_receptors
+        for (rec in ser_receptors) {
+            if (remove_rec_dropout) {
+                keep_id <- which(dom@counts[rec, ] > 0)
+                rec_z_scores <- dom@z_scores[rec, keep_id]
+                tar_tf_scores <- scores[keep_id]
+            } else {
+                rec_z_scores <- dom@z_scores[rec, ]
+                tar_tf_scores <- scores
+            }
+            # There are some cases where all the tfs are zero for the cells left after trimming
+            # dropout for receptors. Skip those and set cor to NA manually.
+            if (sum(tar_tf_scores) == 0) {
+                rhorow[rec] <- NA
+                next
+            }
+            corr <- stats::cor.test(
+                rec_z_scores, tar_tf_scores,
+                method = "spearman",
+                alternative = "greater", exact = FALSE
+            )
+            rhorow[rec] <- corr$estimate
+        }
+        if (length(module_rec_targets) > 0) {
+            rhorow[module_rec_targets] <- NA
+        }
+        rho[, module] <- rhorow
+    }
+    colnames(rho) <- rownames(dom@features)
+    dom@misc$rec_cor <- rho
+    # assess correlation among genes in the same receptor complex
+    cor_list <- list()
+    for (i in seq_along(names(dom@linkages$rec_lig))) {
+        r <- names(dom@linkages$rec_lig)[i]
+        if (r %in% names(dom@linkages$complexes)) {
+            r_genes <- dom@linkages$complexes[[r]]
+        } else {
+            r_genes <- r
+        }
+        if (sum(rownames(rho) %in% r_genes) != length(r_genes)) {
+            cor_list[[r]] <- rep(0, ncol(rho))
+            next
+        }
+        if (length(r_genes) > 1) {
+            gene_cor <- rho[rownames(rho) %in% r_genes, , drop = FALSE]
+            cor_med <- apply(gene_cor, 2, median)
+            cor_list[[r]] <- cor_med
+        } else {
+            cor_list[[r]] <- rho[rownames(rho) == r_genes, , drop = FALSE]
+        }
+    }
+    # To avoid issues with receptor names, build matrix directly instead of with as.data.frame
+    c_cor <- matrix(unlist(cor_list, use.names = FALSE), nrow = length(cor_list), byrow = TRUE, dimnames = list(names(cor_list), colnames(rho)))
+    dom@cor <- c_cor
+    # Calculate percentage of non-zero expression of receptor genes in clusters
+    cl_rec_percent <- NULL
+    for (rec in ser_receptors) {
+        rec_percent <- vapply(X = levels(dom@clusters), FUN.VALUE = numeric(1), FUN = function(x) {
+            # percentage of cells in cluster with non-zero expression of receptor gene
+            sum(dom@counts[rec, dom@clusters == x] > 0) / length(dom@counts[rec, dom@clusters == x])
+        })
+        cl_rec_percent <- rbind(cl_rec_percent, rec_percent)
+    }
+    rownames(cl_rec_percent) <- ser_receptors
+    dom@misc$cl_rec_percent <- cl_rec_percent
+    validObject(dom)
+    return(dom)
+}

@@ -1,0 +1,253 @@
+# To prevent notes regarding no visible binding for global variables when using non-standard evaluation:
+utils::globalVariables(c("ligand", "mean_counts", "ligand_exp", "rec_exp", "tf_auc"))
+
+#' Get ligands with resolved names
+#' @param dom A built [domino()] object (as output by [build_domino()])
+#' @return A named list with two elements:
+#'   \item{lig_names}{Character vector of unique ligand gene names or aliases}
+#'   \item{complex_names}{Named list mapping complex names to component gene vectors}
+#' @keywords internal
+get_resolved_ligands <- function(dom) {
+    
+    check_arg(dom, allow_class = "domino", allow_len = 1)
+
+    all_lig <- unlist(dom@linkages$rec_lig)
+    all_lig <- unique(all_lig)
+    all_lig <- all_lig[nzchar(all_lig)]
+    all_lig_names_resolved <- resolve_names(dom, all_lig)
+
+    lig_complexes_resolved_list <- resolve_complexes(dom, all_lig_names_resolved)
+    all_lig_names_resolved <- unlist(lig_complexes_resolved_list)
+
+    return(list("lig_names" = unique(all_lig_names_resolved), "complex_names" = lig_complexes_resolved_list))
+}
+
+#' Get ligand expression matrix for outgoing clusters
+#' @param dom A built [domino()] object (as output by [build_domino()])
+#' @param send_clusters Character or factor vector of cluster names for which to compute outgoing ligand signals
+#' @param lig_genes Character vector of ligand gene names; should intersect with expression matrix rownames
+#' @param complexes Named list where names are complex identifiers and values are character vectors of component genes.
+#'   Used to aggregate expression for multi-gene complexes. Empty list is acceptable.
+#'   The output of [get_resolved_ligands()] can be used here.
+#' @param exp_type Character of length 1: either "counts" or "z_scores" to specify expression type
+#' @return Data frame with a ligand column and then one column per send_cluster with mean expression values. Ligands not found are dropped with a message, complexes with missing components are dropped, and send_clusters with no cells are omitted.
+#' @keywords internal
+get_ligand_expression <- function(dom, send_clusters, lig_genes, complexes, exp_type) {
+    
+    check_arg(dom, allow_class = "domino", allow_len = 1)
+    check_arg(send_clusters, allow_class = c("character", "factor"), allow_values = dom_clusters(dom))
+    check_arg(lig_genes, allow_class = "character")
+    check_arg(complexes, allow_class = "list", need_names = TRUE)
+    check_arg(exp_type, allow_class = "character", allow_values = c("counts", "z_scores"), allow_len = 1)
+
+    expr_mat <- switch(exp_type,
+        counts = dom_counts(dom),
+        z_scores = dom_zscores(dom),
+        stop("Invalid exp_type. Must be either 'counts' or 'z_scores'.")
+    )
+
+    if (!all(lig_genes %in% rownames(expr_mat))) {
+        message("Some ligands not found in expression matrix: ",
+            toString(setdiff(lig_genes, rownames(expr_mat))))
+        lig_genes <- intersect(lig_genes, rownames(expr_mat))
+        if (length(lig_genes) == 0) {
+            stop("No ligands found in expression matrix")
+        }
+    }
+
+    cl_ligands_list <- send_clusters |>
+        purrr::set_names() |>
+        purrr::map(function(clust) {
+            idx <- which(dom@clusters == clust)
+            if (length(idx) == 0) return(NULL)
+            rowMeans(expr_mat[lig_genes, idx, drop = FALSE])
+        })
+    cl_ligands <- do.call(cbind, cl_ligands_list)
+
+    if (length(dom_linkages(dom, "complexes")) > 0) {
+        cl_ligands_coll_list <- avg_exp_for_complexes(cl_ligands, complexes)
+        if (length(cl_ligands_coll_list) > 0) {
+            cl_ligands <- purrr::list_rbind(cl_ligands_coll_list, names_to = "ligand")
+        } else {
+            cl_ligands <- data.frame(ligand = character(), as.data.frame(cl_ligands)[0, , drop = FALSE], check.names = FALSE)
+        }
+    } else {
+        cl_ligands <- as.data.frame(cl_ligands)
+        cl_ligands$ligand <- rownames(cl_ligands)
+        cl_ligands <- dplyr::relocate(cl_ligands, ligand, .before = 1)
+    }
+
+    return(cl_ligands)
+}
+
+#' Get receptor-ligand signaling information
+#' @param dom A built [domino()] object (as output by [build_domino()])
+#' @param rec_clusters Character or factor vector of cluster names for which to compute incoming receptor/TF signals
+#' @param cl_ligands_sub Data frame with columns 'ligand', 'cluster', 'mean_counts';
+#'  using [reshape2::melt()] on the output of [get_ligand_expression()] is a convenient way to get this
+#' @param exp_type Character of length 1: either "counts" or "z_scores" to specify expression type
+#' @return Data frame with columns:
+#'   ligand, receptor, transcription_factor, ligand_exp, rec_exp, tf_auc, sending_cl, receiving_cl.
+#'   Each row represents a ligand-receptor-TF triplet with receiver cluster, and corresponding expression values.
+#'   Returns empty data frame if no interactions found.
+#' @keywords internal
+get_signaling_info <- function(dom, rec_clusters, cl_ligands_sub, exp_type) {
+
+    check_arg(dom, allow_class = "domino", allow_len = 1)
+    check_arg(rec_clusters, allow_class = c("character", "factor"), allow_values = dom_clusters(dom))
+    check_arg(cl_ligands_sub, allow_class = "data.frame", need_vars = c("ligand", "cluster", "mean_counts"))
+    check_arg(exp_type, allow_class = "character", allow_values = c("counts", "z_scores"), allow_len = 1)
+
+    expr_mat <- switch(exp_type,
+        counts = dom_counts(dom),
+        z_scores = dom_zscores(dom),
+        stop("Invalid exp_type. Must be either 'counts' or 'z_scores'.")
+    )
+
+    tf_mat <- dom_tf_activation(dom)
+    row_list <- list()
+
+    # Helper function to return NA for empty indices and mean where available
+    mean_or_na <- function(mat, rows, cols) {
+        if (length(cols) == 0) return(NA_real_)
+        mean(mat[rows, cols, drop = FALSE])
+    }
+
+    for (cl in rec_clusters) {
+        rec_idx <- which(dom@clusters == cl)
+        tf_idx <- dom@linkages$clust_tf_rec[[cl]]
+        if (length(tf_idx) == 0) next
+        for (tf in names(tf_idx)) {
+            recs <- tf_idx[[tf]]
+            if (length(recs) == 0) next
+
+            tf_sig <- mean_or_na(tf_mat, tf, rec_idx)
+
+            for (rec in recs) {
+
+                ligs <- resolve_names(dom, dom@linkages$rec_lig[[rec]])
+                if (length(ligs) == 0) next
+
+                df_tmp <- cl_ligands_sub[cl_ligands_sub$ligand %in% ligs, ]
+                if (nrow(df_tmp) == 0) next
+
+                rec_sep <- unlist(resolve_complexes(dom, rec))
+                # Skip if any receptor components are missing
+                if (!all(rec_sep %in% rownames(expr_mat))) next
+                rec_sig <- mean_or_na(expr_mat, rec_sep, rec_idx)
+
+                row_list[[length(row_list) + 1]] <- data.frame(
+                    ligand = df_tmp$ligand,
+                    receptor = rec,
+                    transcription_factor = tf,
+                    ligand_exp = df_tmp$mean_counts,
+                    rec_exp = rec_sig,
+                    tf_auc = tf_sig,
+                    sending_cl = df_tmp$cluster,
+                    receiving_cl = cl
+                )
+            }
+        }
+    }
+
+    if (length(row_list) == 0) {
+        message("No interactions found for the specified clusters and expression type.")
+        return(data.frame())
+    }       
+
+    return(purrr::list_rbind(row_list))
+}
+
+#' Turn domino object signaling information into a data frame
+#'
+#' Constructs a data frame of ligand-receptor-TF signaling triplets from a built [domino()] object.
+#' Expression values are averaged across cells within each cluster (ligands from sending clusters,
+#' receptors and TFs from receiving clusters).
+#'
+#' @param dom A built [domino()] object (as output by [build_domino()])
+#' @param send_clusters Character/factor vector of cluster names for ligand signals.
+#'   If NULL (default), uses all clusters in dom.
+#' @param rec_clusters Character/factor vector of cluster names for receptor/TF signals.
+#'   If NULL (default), uses all clusters in dom.
+#' @param exp_type Either "counts" or "z_scores" for expression type
+#' @return Data frame with columns: ligand, receptor, transcription_factor,
+#'   ligand_exp, rec_exp, tf_auc, sending_cl, receiving_cl.
+#'   Each row is a ligand-receptor-TF triplet from a sender-to-receiver cluster pair with
+#'   corresponding mean expression values.
+#'   Empty data frame returned if no valid interactions found.
+#' @export
+#' @examples
+#' data("DominoObjects")
+#' dom <- DominoObjects$built_dom_tiny
+#' df <- dom_to_df(dom, exp_type = "z_scores")
+#' head(df)
+dom_to_df <- function(dom, send_clusters = NULL, rec_clusters = NULL, exp_type = "counts") {
+
+    check_arg(dom, allow_class = "domino", allow_len = 1)
+    if (!is.null(send_clusters)) {
+        check_arg(send_clusters, allow_class = c("character", "factor"), allow_values = dom_clusters(dom))
+
+        if (anyDuplicated(send_clusters)) {
+            send_clusters <- unique(send_clusters)
+            message("Duplicate entries in send_clusters detected. Using unique values: ", toString(send_clusters))
+        }
+    }
+
+    if (!is.null(rec_clusters)) {
+        check_arg(rec_clusters, allow_class = c("character", "factor"), allow_values = dom_clusters(dom))
+
+        if (anyDuplicated(rec_clusters)) {
+            rec_clusters <- unique(rec_clusters)
+            message("Duplicate entries in rec_clusters detected. Using unique values: ", toString(rec_clusters))
+        }
+    }
+
+    check_arg(exp_type, allow_class = "character", allow_values = c("counts", "z_scores"), allow_len = 1)
+
+    all_lig_names_resolved_lists <- get_resolved_ligands(dom)
+    all_lig_names_resolved <- all_lig_names_resolved_lists$lig_names
+    all_lig_complexes_resolved <- all_lig_names_resolved_lists$complex_names
+
+    if (exp_type == "counts") {
+        lig_genes <- intersect(all_lig_names_resolved, rownames(dom@counts))
+    } else if (exp_type == "z_scores") {
+        lig_genes <- intersect(all_lig_names_resolved, rownames(dom@z_scores))
+    }
+
+    if (length(lig_genes) == 0) {
+        stop("No ligands found in the expression matrix for the specified exp_type.")
+    }
+
+    if (is.null(send_clusters)) {
+        send_clusters <- levels(dom@clusters)
+    }
+
+    cl_ligands <- get_ligand_expression(dom, send_clusters, lig_genes, all_lig_complexes_resolved, exp_type)
+
+    cl_ligands_sub <- reshape2::melt(cl_ligands, id.vars = "ligand",
+        variable.name = "cluster", value.name = "mean_counts")
+    
+    if (exp_type == "counts") {
+        cl_ligands_sub <- dplyr::filter(cl_ligands_sub, mean_counts > 0)
+    }
+
+    if (is.null(rec_clusters)) {
+        rec_clusters <- levels(dom@clusters)
+    }
+
+    # get_signaling_info returns a data frame w/o cols when no interactions are present
+    dframe <- get_signaling_info(dom, rec_clusters, cl_ligands_sub, exp_type)
+    if (nrow(dframe) == 0) {
+        return(data.frame(ligand = character(), receptor = character(), transcription_factor = character(),
+            ligand_exp = numeric(), rec_exp = numeric(), tf_auc = numeric(),
+            sending_cl = character(), receiving_cl = character()))
+    }
+
+    if (exp_type == "counts") {
+        dframe <- dplyr::filter(dframe, ligand_exp > 0, rec_exp > 0, tf_auc > 0)
+    } else if (exp_type == "z_scores") {
+        dframe <- dplyr::filter(dframe, tf_auc > 0)
+    }
+
+    return(dframe)
+}

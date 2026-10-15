@@ -18,44 +18,53 @@ export(dom_info)
 export(dom_linkages)
 export(dom_network_items)
 export(dom_signaling)
+export(dom_signalling)
 export(dom_tf_activation)
+export(dom_to_df)
 export(dom_zscores)
 export(feat_heatmap)
 export(gene_network)
 export(incoming_signaling_heatmap)
+export(incoming_signalling_heatmap)
 export(mean_ligand_expression)
-export(mock_linkage_summary)
-export(obtain_circos_expression)
 export(plot_differential_linkages)
 export(rename_clusters)
-export(render_circos_ligand_receptor)
 export(signaling_heatmap)
 export(signaling_network)
+export(signalling_heatmap)
+export(signalling_network)
+export(summarise_linkages)
 export(summarize_linkages)
 export(test_differential_linkages)
 exportClasses(domino)
 exportClasses(linkage_summary)
 exportMethods(print)
 exportMethods(show)
+exportMethods(subset)
 import(ComplexHeatmap)
 import(biomaRt)
 import(circlize)
 import(grDevices)
 import(grid)
-import(magrittr)
 import(methods)
 import(plyr)
 import(stats)
 importClassesFrom(Matrix,dgCMatrix)
 importFrom(Matrix,rowSums)
+importFrom(biomaRt,
+  getLDS,
+  useMart
+)
 importFrom(ggpubr,ggscatter)
-importFrom(igraph,E)
-importFrom(igraph,V)
-importFrom(igraph,graph)
-importFrom(igraph,layout_in_circle)
-importFrom(igraph,layout_on_sphere)
-importFrom(igraph,layout_randomly)
-importFrom(igraph,layout_with_fr)
-importFrom(igraph,layout_with_kk)
-importFrom(igraph,simplify)
+importFrom(igraph,
+  E,
+  V,
+  graph,
+  layout_in_circle,
+  layout_on_sphere,
+  layout_randomly,
+  layout_with_fr,
+  layout_with_kk,
+  simplify
+)
 importFrom(utils,read.csv)

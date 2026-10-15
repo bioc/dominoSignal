@@ -1,18 +1,39 @@
 .DS_Store
-*.Rproj
-.Rproj.user
-.Rhistory
-R/.Rhistory
-*.rds
-*.loom
-.vscode
-*.vscode
-scenic/*
 
-scratch/
-/docs/
-/Meta/
-pkgdown/
-inst/pkgdown.yml
-!pkgdown/extra.css
+# IDE and user/session files
+*.Rproj
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+.vscode/
+
+# Local analysis artifacts
+*.loom
+*.rds
+*.log
+Rplots.pdf
+
+# R package build and check artifacts
+*.tar.gz
+/*.Rcheck/
+/check/
+*.Rout
+*.Rout.fail
+*.Rout.save
 dominoSignal.BiocCheck/
+..Rcheck/
+
+# pkgdown and generated site output
+docs/*
+doc/
+/pkgdown/
+inst/pkgdown.yml
+
+# Generated vignette output
+/vignettes/*.html
+/vignettes/*.R
+/vignettes/*_cache/
+/vignettes/*_files/
+/vignettes/articles/*_cache/
+/vignettes/articles/*_files/

@@ -1,0 +1,130 @@
+#' @import methods
+#' @import stats
+#'
+NULL
+
+#' Statistical test for differential linkages across multiple domino results
+#'
+#' Statistical test for differential linkages across multiple domino results
+#'
+#' @param link_summary a [linkage_summary()] object
+#' @param cluster the name of the cell cluster being compared across multiple [domino()] results
+#' @param group.by the name of the column in `linkage_summary@subject_meta` by which to group subjects for counting.
+#' @param linkage a stored linkage from the [domino()] object.
+#'   Can compare any of 'tfs', 'rec', 'incoming_lig', 'tfs_rec', or 'rec_lig'
+#' @param subject_names a vector of subject_names from the linkage_summary to restrict testing to.
+#'   If NULL, all subjects in `link_summary` are included.
+#' @return A data frame of results from the test of the differential linkages. Rows correspond to each
+#'   linkage tested. Columns correspond to:
+#' \itemize{
+#'  \item{'cluster'} : the name of the cell cluster being compared
+#'  \item{'linkage'} : the type of linkage being compared
+#'  \item{'group.by'} : the grouping variable
+#'  \item{'test_name'} : the test used for comparison (Fisher's exact test)
+#'  \item{'feature'} : individual linkages compared
+#'  \item{'test statistics'} : an odds ratio (for 2 groups), p-value, and fdr-adjusted p-value.
+#'  \item{'total_count'} : total number of subjects where the linkage is active
+#'  \item{'X_count'} : number of subjects in each category of group.by (X) where the linkage is active
+#'  \item{'total_n'} : number of total subjects compared
+#'  \item{'X_n'} : total number of subjects in each category of group.by (X)
+#' }
+#' @export
+#' @seealso [summarize_linkages()] to create [linkage_summary()] objects
+#' @family differentials
+#' @examples
+#' data(LinkageSummary)
+#' tiny_differential_linkage_c1 <- test_differential_linkages(
+#'     link_summary = LinkageSummary$linkage_sum_tiny, cluster = "C1", group.by = "group",
+#'     linkage = "rec", subject_names = c("P1", "P2", "P4", "P5")
+#' )
+#'
+test_differential_linkages <- function(
+    link_summary, cluster, group.by, linkage = "rec_lig", subject_names = NULL
+) {
+
+    check_arg(link_summary, allow_class = "linkage_summary", allow_len = 1)
+    check_arg(cluster, allow_class = "character", allow_len = 1)
+    check_arg(group.by, allow_class = "character", allow_len = 1, allow_values = colnames(link_summary@subject_meta))
+    check_arg(linkage, allow_class = "character", allow_len = 1,
+        allow_values = c("tfs", "rec", "incoming_lig", "tfs_rec", "rec_lig"))
+    check_arg(subject_names, allow_class = c("factor", "character", "NULL"))
+
+    link_summary <- filter_by_subject_names(link_summary, subject_names)
+    # count the number of groups
+    subject_count <- as.data.frame(table(link_summary@subject_meta[[group.by]]))
+    colnames(subject_count) <- c(group.by, "total")
+    group_levels <- subject_count[[group.by]]
+    if (nrow(subject_count) < 2) {
+        stop(sprintf(
+            "At least 2 groups of %s must be represented among the included subjects; found: %s",
+            group.by, toString(group_levels)
+        ))
+    }
+    count_link <- count_linkage(
+        link_summary = link_summary, cluster = cluster, linkage = linkage,
+        group.by = group.by
+    )
+    # initiate data frame for storing results
+    n <- nrow(count_link)
+    result_df <- data.frame(cluster = rep(cluster, n), linkage = rep(linkage, n), group.by = rep(
+        group.by,
+        n
+    ), test_name = rep("fishers.exact", n), feature = count_link[["feature"]], stringsAsFactors = FALSE)
+    # empty contingency table
+    test_mat <- matrix(data = NA, nrow = nrow(subject_count), ncol = 2)
+    rownames(test_mat) <- subject_count[[group.by]]
+    colnames(test_mat) <- c("linkage_present", "linkage_absent")
+    test_template <- as.data.frame(test_mat)
+    
+    test_result <- as.data.frame(t(vapply(
+        result_df[["feature"]],
+        FUN.VALUE = c("odds.ratio" = numeric(1), "p.value" = numeric(1)), FUN = function(x) {
+            feat_count <- count_link[count_link[["feature"]] == x, !colnames(count_link) %in% c(
+                "feature",
+                "total_count"
+            )]
+            feat_count <- vapply(feat_count, FUN.VALUE = numeric(1), FUN = as.numeric)
+            # fill contingency table
+            test_df <- test_template
+            test_df[["linkage_present"]] <- feat_count
+            test_df[["linkage_absent"]] <- subject_count[["total"]] - feat_count
+            # conduct test
+            test <- fisher.test(test_df)
+            odds.ratio <- test$estimate
+            if (is.null(odds.ratio)) {
+                odds.ratio <- NA
+            }
+            p.value <- test$p.value
+            res <- c(odds.ratio, p.value)
+            res <- setNames(res, c("odds.ratio", "p.value"))
+            return(res)
+        }
+    )))
+    # include fdr-adjusted p-values
+    test_result[["p.adj"]] <- p.adjust(p = test_result[["p.value"]], method = "fdr")
+    # append test result columns to result
+    result_df <- cbind(result_df, test_result)
+    # append counts of active linkages for each group
+    count_append <- count_link[, colnames(count_link) != "feature", drop = FALSE]
+    colnames(count_append) <- vapply(
+        colnames(count_append),
+        FUN.VALUE = character(1), FUN = function(x) {
+            if (grepl("_count$", x)) {
+                return(x)
+            } else {
+                return(paste0(x, "_count"))
+            }
+        }
+    )
+    result_df <- cbind(result_df, count_append)
+    # append total counts of subjects in each group and the total number of subjects
+    total_n <- sum(subject_count[["total"]])
+    if (nrow(result_df) > 0) {
+        result_df[["total_n"]] <- total_n
+        for (g in group_levels) {
+            g_n <- as.numeric(subject_count[subject_count[[group.by]] == g, "total"])
+            result_df[[paste0(g, "_n")]] <- g_n
+        }
+    }
+    return(result_df)
+}
